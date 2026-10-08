@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.ayna.warehouse.shell'
+    compileSdk 34
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // The released APKs are debug-signed. Pinning the keystore to the copy kept in
+    // the project root keeps the signature stable across build machines — without
+    // this, AGP falls back to ~/.android/debug.keystore and silently generates a new
+    // key, which breaks the in-app self-update (UpdateManager).
+    signingConfigs {
+        debug {
+            storeFile file('../debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    defaultConfig {
+        applicationId "com.ayna.warehouse.shell"
+        minSdk 26
+        targetSdk 34
+        versionCode 11
+        versionName "1.10"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation files('libs/platform_sdk_v4.1.0326.jar')
+    implementation 'androidx.core:core:1.13.1'
+}
