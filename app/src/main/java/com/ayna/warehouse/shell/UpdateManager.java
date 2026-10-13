@@ -5,7 +5,6 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -29,10 +28,11 @@ import java.security.MessageDigest;
 public class UpdateManager {
 
     private static final String TAG = "UpdateManager";
-    private static final String PREFS_NAME = "warehouse_shell_prefs";
-    private static final String KEY_DECLINED_VERSION = "declined_update_version";
-    private static final String KEY_DECLINED_AT = "declined_update_at";
-    private static final long DECLINED_COOLDOWN_MS = 24L * 60 * 60 * 1000;
+
+    // No decline cooldown. The shell runs on a fixed set of internal terminals, so
+    // an outdated client is a support problem rather than a user preference: when
+    // an update is available it is offered on every cold start. "Later" dismisses
+    // the current dialog only; nothing about the choice is persisted.
 
     private UpdateManager() {
     }
@@ -52,12 +52,8 @@ public class UpdateManager {
                     if (info.versionCode <= currentVersion) {
                         return;
                     }
-                    SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                    if (info.versionCode == prefs.getInt(KEY_DECLINED_VERSION, -1)
-                            && System.currentTimeMillis() - prefs.getLong(KEY_DECLINED_AT, 0) < DECLINED_COOLDOWN_MS) {
-                        return;
-                    }
-                    final File apk = downloadApk(activity, info);
+                    Log.i(TAG, "update available: " + info.versionCode + " > " + currentVersion);
+            final File apk = downloadApk(activity, info);
                     activity.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
@@ -184,37 +180,28 @@ public class UpdateManager {
         return expected.equalsIgnoreCase(hex.toString());
     }
 
+    // update.json in the field carries only versionCode, so fall back to it rather
+    // than rendering "A new version (v) is available".
+    private static String describeVersion(UpdateInfo info) {
+        String name = info.versionName == null ? "" : info.versionName.trim();
+        return name.isEmpty() ? String.valueOf(info.versionCode) : name;
+    }
+
     private static void promptInstall(final Activity activity, final UpdateInfo info, final File apk) {
         new AlertDialog.Builder(activity)
                 .setTitle(R.string.update_title)
-                .setMessage(activity.getString(R.string.update_message, info.versionName))
+                .setMessage(activity.getString(R.string.update_message, describeVersion(info)))
                 .setPositiveButton(R.string.update_install, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         requestInstall(activity, apk);
                     }
                 })
-                .setNegativeButton(R.string.update_later, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        rememberDeclined(activity, info);
-                    }
-                })
-                .setOnCancelListener(new DialogInterface.OnCancelListener() {
-                    @Override
-                    public void onCancel(DialogInterface dialog) {
-                        rememberDeclined(activity, info);
-                    }
-                })
+                // Dismissal is not a decision: nothing is recorded, so the offer
+                // is repeated on the next cold start. There is deliberately no
+                // OnCancelListener - back or an outside tap should behave the same.
+                .setNegativeButton(R.string.update_later, null)
                 .show();
-    }
-
-    private static void rememberDeclined(Activity activity, UpdateInfo info) {
-        activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putInt(KEY_DECLINED_VERSION, (int) info.versionCode)
-                .putLong(KEY_DECLINED_AT, System.currentTimeMillis())
-                .apply();
     }
 
     private static void requestInstall(final Activity activity, final File apk) {
